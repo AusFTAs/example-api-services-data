@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Services Data Example</title>
+  <meta charset="UTF-8">
+  <!-- Babel, d3 and friends. B -->
+  <script src="//ausftas.github.io/example-api-common/babel.min.js"></script>
+  <script src="//ausftas.github.io/example-api-common/d3.v4.js"></script>
+  <!-- look and feel -->
+  <link rel="stylesheet" type="text/css" href="http://blog.dfilimonov.com/github-ribbons-css/ribbons.css">
+  <link rel="stylesheet" type="text/css" href="//ausftas.github.io/example-api-common/style.css">
+  <script type="text/babel" data-presets="es2015" src="//ausftas.github.io/example-api-common/style.js"></script>
+  <!-- shared sources -->
+  <script type="text/babel" data-presets="es2015" src="//ausftas.github.io/example-api-common/common.js"></script>
+</head>
+<body>
+  <div id="header"></div>
+
+  <div id="example" class="content">
+    <h1>API Services Data Example</h1>
+
+    <div id="loading">
+      Please wait while it loads.
+    </div>
+
+    <!-- ----------------------------------------------------------------- -->
+    <!-- Part 1: Selection of sector and country/agreement -->
+    <!-- ----------------------------------------------------------------- -->
+    <h2>Select Sector</h2>
+    <p>
+    Please select a sector:
+    <select id="sectorSelection">
+    </select>
+    </p>
+    <h2>Select Country/Agreement</h2>
+    <p>
+    Please select a Country/Agreement:
+    <select id="countrySelection">
+    </select>
+    </p>
+    
+    <!-- ----------------------------------------------------------------- -->
+    <!-- Part 3: Display details of selected service -->
+    <!-- ----------------------------------------------------------------- -->
+
+    <h2>Service Details</h2>
+    <h3>W/120 Code</h3>
+    <p id="w120code">Loading...</p>
+    <h3>Description</h3>
+    <p id="description">Loading...</p>
+    <h3>Country</h3>
+    <p id="country">Loading...</p>
+    <h3>Agreement</h3>
+    <p id="agreement">Loading...</p>
+    <h3>Data</h3>
+    <table border="1">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Tariff</th>
+        </tr>
+      </thead>
+      <tbody id="serviceData"></tbody>
+    </table>
+
+    <script type="text/babel" data-presets="es2015" >
+      // load and show a list of agreements
+      FTAPortalAPIExample.start(async function(version, agreements)
+      {
+        function parameter(name, defaultValue='')
+        {
+          let value = window.location.hash.match(RegExp(`${name}=([^&]+)`, 'i'));
+          return value && value[1] || defaultValue;
+        }
+
+        const hierarchy = await FTAPortalAPIExample.invoke('/services/hierarchy.json');
+        
+        let agreement = parameter('agreement', 'AANZFTA');
+        let country = parameter('country', 'BRN');
+        let sector = parameter('sector', '1.A.a.1');
+
+        let sectorData = null;
+
+        function showSectorCountryAgreementSelection()
+        {
+          function updateSectorSelection()
+          {
+            const sectorSelection = d3.select('#sectorSelection');
+
+            let sectorsList = Object.entries(hierarchy).sort((a, b) => a[1].order - b[1].order);
+
+            sectorSelection.html('').selectAll().data(sectorsList)
+              .enter()
+                .option(node => `${node[0]} - ${node[1].description}`)
+                  .property('value', node => node[0])
+                  .property('disabled', node => node[1].countryAgreements ? '' :'disabled');
+
+            sectorSelection.value(sector);
+
+            updateCountrySelection();
+
+            sectorSelection.on('change', null).on('change', () => updateCountrySelection(sector = sectorSelection.val()))
+          }
+
+          function updateCountrySelection()
+          {
+            console.log('SELECT COUNTRY OF', sector);
+
+            const countrySelection = d3.select('#countrySelection');
+            let countriesList = hierarchy[sector].countryAgreements;
+
+            countrySelection.html('').selectAll().data(countriesList)
+              .enter()
+                .option(ca => `${ca.country}-${ca.agreement}`)
+                  .property('value', ca => `${ca.country}-${ca.agreement}`);
+
+            countrySelection.value(`${country}-${agreement}`);
+
+            countrySelection.on('change', null).on('change', () =>
+            {
+              [country, agreement] = countrySelection.val().split('-');
+              updateServiceDetails();
+            })
+			
+            updateServiceDetails();
+          }
+
+          async function updateServiceDetails()
+          {
+            console.log('SHOW SERVICE', sector, 'OF', country, agreement);
+
+            const data = await FTAPortalAPIExample.invoke(`/services/${country}/${agreement}.json`);
+            
+            sectorData = data[sector];
+
+            d3.select('#w120code').html(sector);
+
+            d3.select('#description').html(hierarchy[sector].description);
+
+            d3.select('#country').html(country);
+
+            d3.select('#agreement').html(agreement);
+
+            function addRow(tbodyId, label, value)
+            {
+              let tr = d3.select(tbodyId).tr();
+              tr.th(label);
+              tr.td(value + '');
+            }
+
+            d3.select('#serviceData').html('');
+
+            for (const [label, value] of Object.entries(sectorData))
+            {
+              addRow('#serviceData', label, value);
+            }
+          }
+
+          updateSectorSelection();
+
+        }
+
+        showSectorCountryAgreementSelection();
+        d3.select('#loading').hide();
+      });
+    </script>
+  </div>
+
+  <div id="footer"></div>
+
+
+</body>
+</html>
